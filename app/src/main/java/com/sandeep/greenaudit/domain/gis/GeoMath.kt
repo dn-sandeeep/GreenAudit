@@ -1,6 +1,7 @@
 package com.sandeep.greenaudit.domain.gis
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
@@ -52,6 +53,47 @@ object GeoMath {
     fun bearingToCompass(bearingDegrees: Double): String {
         val index = round(bearingDegrees / 45.0).toInt().mod(8)
         return COMPASS_POINTS[index]
+    }
+
+    /**
+     * Area of a closed polygon on the earth's surface, in square meters.
+     *
+     * Uses the spherical-excess formula (a line integral over the sphere via
+     * Green's theorem - the same family as Google Maps Utils'
+     * SphericalUtil.computeArea), NOT flat shoelace on raw lat/lon degrees,
+     * which would be wrong off the equator since a degree of longitude
+     * shrinks by cos(latitude) while a degree of latitude does not.
+     *
+     * `polygon` need not repeat its first point as its last - the ring is
+     * closed automatically.
+     */
+    fun computeAreaSqMeters(polygon: List<GeoPoint>): Double {
+        if (polygon.size < 3) return 0.0
+
+        var total = 0.0
+        val n = polygon.size
+        for (i in 0 until n) {
+            val current = polygon[i]
+            val next = polygon[(i + 1) % n]
+            val lat1 = Math.toRadians(current.latitude)
+            val lat2 = Math.toRadians(next.latitude)
+            val lon1 = Math.toRadians(current.longitude)
+            val lon2 = Math.toRadians(next.longitude)
+            total += (lon2 - lon1) * (2 + sin(lat1) + sin(lat2))
+        }
+        return abs(total) * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS / 2.0
+    }
+
+    /** Perimeter of a closed polygon, summing haversine distance edge by edge. */
+    fun computePerimeterMeters(polygon: List<GeoPoint>): Double {
+        if (polygon.size < 2) return 0.0
+
+        var total = 0.0
+        val n = polygon.size
+        for (i in 0 until n) {
+            total += haversineDistanceMeters(polygon[i], polygon[(i + 1) % n])
+        }
+        return total
     }
 
     internal fun degreesToRadians(degrees: Double): Double = degrees * PI / 180.0
