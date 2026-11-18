@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.sandeep.greenaudit.ui.login.LoginScreen
+import com.sandeep.greenaudit.ui.mappark.MapNewParkScreen
 import com.sandeep.greenaudit.ui.parks.ParksScreen
 
 @Composable
@@ -52,6 +53,12 @@ fun GreenAuditNavHost(navController: NavHostController = rememberNavController()
                         popUpTo(Routes.PARKS) { inclusive = true }
                     }
                 },
+            )
+        }
+        composable(Routes.MAP_NEW_PARK) {
+            MapNewParkScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
     }
