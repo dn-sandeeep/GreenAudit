@@ -4,6 +4,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.round
 import kotlin.math.sin
@@ -94,6 +95,48 @@ object GeoMath {
             total += haversineDistanceMeters(polygon[i], polygon[(i + 1) % n])
         }
         return total
+    }
+
+    /**
+     * Shortest distance from [point] to the polygon's boundary (nearest
+     * edge), in meters. Used to tell a surveyor who is outside a park how
+     * far away they still are. Computed on the same tangent-plane
+     * projection as [PointInPolygon], so it stays consistent with the
+     * inside/outside check.
+     */
+    fun distanceToPolygonBoundaryMeters(point: GeoPoint, polygon: List<GeoPoint>): Double {
+        if (polygon.isEmpty()) return Double.NaN
+        if (polygon.size == 1) return haversineDistanceMeters(point, polygon[0])
+
+        val origin = polygon[0]
+        val projectedPoint = PlanarProjection.project(point, origin)
+        val projectedPolygon = polygon.map { PlanarProjection.project(it, origin) }
+
+        var minDistance = Double.MAX_VALUE
+        val n = projectedPolygon.size
+        for (i in 0 until n) {
+            val a = projectedPolygon[i]
+            val b = projectedPolygon[(i + 1) % n]
+            val distance = distancePointToSegment(projectedPoint, a, b)
+            if (distance < minDistance) minDistance = distance
+        }
+        return minDistance
+    }
+
+    private fun distancePointToSegment(
+        p: PlanarProjection.PlanarPoint,
+        a: PlanarProjection.PlanarPoint,
+        b: PlanarProjection.PlanarPoint,
+    ): Double {
+        val dx = b.x - a.x
+        val dy = b.y - a.y
+        if (dx == 0.0 && dy == 0.0) {
+            return hypot(p.x - a.x, p.y - a.y)
+        }
+        val t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)).coerceIn(0.0, 1.0)
+        val closestX = a.x + t * dx
+        val closestY = a.y + t * dy
+        return hypot(p.x - closestX, p.y - closestY)
     }
 
     internal fun degreesToRadians(degrees: Double): Double = degrees * PI / 180.0
