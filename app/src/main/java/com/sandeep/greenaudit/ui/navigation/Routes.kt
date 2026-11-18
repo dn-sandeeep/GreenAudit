@@ -6,9 +6,9 @@ object Routes {
     const val LOGIN = "login"
     const val PARKS = "parks"
     const val MAP_NEW_PARK = "mapNewPark"
-    const val SURVEY = "survey/{parkId}/{surveyId}"
+    const val SURVEY = "survey/{parkId}"
     const val CAMERA = "camera/{parkId}/{surveyId}"
 
-    fun survey(parkId: String, surveyId: String) = "survey/$parkId/$surveyId"
+    fun survey(parkId: String) = "survey/$parkId"
     fun camera(parkId: String, surveyId: String) = "camera/$parkId/$surveyId"
 }
