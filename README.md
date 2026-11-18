@@ -1,0 +1,85 @@
+# GreenAudit
+
+An offline-first Android app for surveying city parks: browse parks on a list and a map, draw a new park's boundary by tapping its corners, check in only when you're physically inside it with a good GPS fix, record a survey, and take a stamped photo — all of it working in airplane mode and syncing later.
+
+## Build and run
+
+```
+./gradlew assembleDebug
+```
+
+Builds cleanly on a fresh checkout — no API key, secret, or manual file is required. The map uses [osmdroid](https://github.com/osmdroid/osmdroid) (OpenStreetMap tiles), which is keyless, specifically so a clean checkout never needs a `local.properties` entry or a CI secret to show a working map.
+
+Install and run: `./gradlew installDebug`, or open the project in Android Studio and run the `app` configuration. minSdk 26, targetSdk 36.
+
+### Demo account
+
+```
+Email:    surveyor@greenaudit.app
+Password: GreenAudit123
+```
+
+This is the only account the mock auth accepts (see `domain/auth/DemoCredentials.kt`). The session is persisted in DataStore and survives an app restart; logging out clears it and wipes all local park/survey/photo data (then reseeds the demo parks, so the app isn't left empty for the next login).
+
+### Testing the geofenced check-in
+
+The 22 seeded demo parks are real Jaipur park locations (see "What I'd do next" — a fixed city was the simplest way to seed "real boundary coordinates," but it means you can only check in on a *seeded* park if you are physically in Jaipur. To test the check-in/survey/camera flow from anywhere else: tap **+** on the parks screen, let the map center on your own GPS fix (there's a my-location button if it doesn't), tap out a small boundary around yourself, save it, then open it and check in — you'll be inside the park you just drew.
+
+## Architecture
+
+```
+ui/            Jetpack Compose screens + per-screen ViewModels (Hilt-injected)
+domain/
+  gis/         Pure-Kotlin geodesic math: distance, bearing, area, perimeter,
+               point-in-polygon. No Android dependency - unit-testable on the JVM.
+  survey/      CheckInEligibilityUseCase - the "can I start a survey here" rule.
+  repository/  Repository interfaces the UI programs against.
+  auth/        Demo credential constant.
+data/
+  local/       Room: entities, DAOs, AppDatabase, enum/polygon TypeConverters,
+               first-run seed data.
+  repository/  Repository implementations - wrap DAOs, compute area/perimeter
+               via GeoMath at write time, stamp new/changed rows PENDING_*.
+  remote/      SyncApi interface + FakeSyncApi (see "Offline & sync" below).
+  sync/        SyncManager - pushes PENDING_* rows through SyncApi.
+  auth/        SessionManager (DataStore-backed login session).
+  location/    LocationTracker - Fused Location Provider wrapped as a Flow.
+  photo/       PhotoStampUtil - burns the stamp into a captured JPEG.
+di/            Hilt modules wiring all of the above.
+```
+
+Layering: `ui` depends on `domain` (interfaces + pure math) and on Hilt-provided `data` implementations; `domain` has no dependency on `data` or `ui`. Within `data`, entities are reused directly as the type repositories expose (no separate "domain model" layer) — a deliberate scope cut for a few-day project; see below.
+
+Each required screen maps to one ViewModel + one or more composables under `ui/`: `login`, `parks` (List and Map are tabs of one screen, per the wireframe), `mappark` (draw a new park), `survey` (check-in + form), `camera` (CameraX capture).
+
+## How area, direction, and "inside the park" are calculated
+
+All of it lives in `domain/gis/GeoMath.kt`, `PlanarProjection.kt`, `PointInPolygon.kt`, `AreaUnits.kt` — pure Kotlin, covered by the four required unit-test suites under `app/src/test/.../domain/`.
+
+- **Distance & bearing**: haversine great-circle distance, and initial bearing bucketed into one of 8 compass points (e.g. "210 m, north-east" in the map bottom sheet).
+- **Area & perimeter**: the spherical-excess formula (same family as Google Maps Utils' `SphericalUtil.computeArea`) for area, and haversine summed edge-by-edge for perimeter — not flat shoelace-on-degrees, which is wrong off the equator since a degree of longitude shrinks by `cos(latitude)`.
+- **Point-in-polygon**: the boundary is projected onto a local tangent plane (equirectangular projection around the polygon's first point, in `PlanarProjection.kt`) and a standard ray-casting test runs on the flat result. This keeps the inside/outside check and the "how far outside" distance (`distanceToPolygonBoundaryMeters`, used in the check-in gate's message) consistent with each other.
+- **Check-in rule** (`CheckInEligibilityUseCase`): eligible only if point-in-polygon is true **and** GPS accuracy is ≤25 m; if outside, the message reports distance to the nearest edge rather than a generic "no."
+
+## Offline & sync
+
+Every write (`ParkRepository.saveNewPark`, `SurveyRepository.checkIn`/`submit`, `PhotoRepository.addPhoto`) goes to Room first and is stamped `SyncState.PENDING_CREATE`/`PENDING_UPDATE`. Nothing in the app ever blocks on a network call, so everything above — mapping a park, checking in, filling a survey, taking photos — works identically in airplane mode.
+
+`SyncManager.syncNow()` (wired to the "Sync now" / sync icon on the parks screen) reads every row with a non-`SYNCED` state and pushes it through `SyncApi`. There's no real backend: `FakeSyncApi` stands in for one, reading `BuildConfig.BASE_URL` (set per build type, never hardcoded in Kotlin) and simulating a real network — a random 250–900 ms delay and a ~10% induced failure — before flipping the row to `SYNCED` on success. A failed push just leaves the row pending for the next "Sync now".
+
+**Conflict policy** (same park edited on two phones while both are offline): last-write-wins by `updatedAtMillis` — whichever device's "Sync now" reaches the (fake) backend last overwrites the other's copy. This is the cut I made deliberately rather than building real merge/CRDT logic: it's simple, predictable, and matches what the brief asks for ("explain how conflicts work," not "solve them perfectly"). With more time, I'd move to a per-field last-write-wins (so two surveyors editing different fields of the same park don't clobber each other) or a small CRDT for the boundary/status fields specifically.
+
+## What I cut / would do next with more time
+
+Required items 1–6 are all implemented and were walked end-to-end on a physical device (see commit history). What I'd add next, roughly in priority order:
+- **Walk mode** and the other bonuses (self-intersection rejection, GeoJSON export, WorkManager background sync, offline tiles, dark mode) — none attempted; the brief is explicit that 1–6 solid beats 1–6 plus half-done bonuses.
+- **A proper domain model layer** separate from the Room entities (entities are reused directly as what repositories return — fine for an app this size, but would start to hurt if the schema needed to diverge from what the UI wants).
+- **DAO/repository/sync instrumented tests** — the four required unit-test suites (area/perimeter, point-in-polygon, distance/bearing, check-in rule) are done and green; Room/Hilt test coverage for the newer data layer is the next thing I'd add.
+- **A GitHub Actions workflow** building the APK and running tests on every push (listed as a bonus).
+- Seeding from the device's *actual* starting city instead of a fixed Jaipur list, so the "check in on a seeded park" path works for anyone, anywhere, out of the box.
+
+## AI use
+
+Claude (Anthropic, Claude Code) was used throughout this project: architecture decisions, most of the Kotlin/Compose implementation, the on-device debugging pass recorded in the commit history, and this README. The app was built and run on a physical device during development (not just compiled) to catch real bugs — three were found and fixed this way (two FAB/layout overlaps and a location-centering gap), see the relevant commit message for details.
+
+**Before submitting, replace this paragraph with your own honest account**: which parts you wrote yourself vs. generated, which parts you reviewed line-by-line, and anything you'd want to re-explain in your own words before the live call. The spec is explicit that undisclosed AI use found in the call is a rejection, while honest disclosure is not — so this section should describe what you actually did, not what a generator assumes you did.
