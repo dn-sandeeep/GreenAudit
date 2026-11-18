@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -48,6 +49,25 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+tasks.withType<Test>().configureEach {
+    // Keep unit-test JVM workers modest and sequential - on a constrained
+    // machine (small Windows pagefile, limited RAM) letting Gradle spin up
+    // several parallel workers each sized by JVM ergonomics can fail with
+    // "insufficient memory for the Java Runtime Environment" well before
+    // any test code runs.
+    maxParallelForks = 1
+    minHeapSize = "128m"
+    maxHeapSize = "512m"
 }
