@@ -1,5 +1,11 @@
 package com.sandeep.greenaudit.ui.mappark
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,16 +28,29 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.sandeep.greenaudit.data.local.entity.ParkType
 import com.sandeep.greenaudit.domain.gis.AreaUnits
 import com.sandeep.greenaudit.ui.parks.label
+
+private fun hasLocationPermission(context: android.content.Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +59,37 @@ fun MapNewParkScreen(
     onSaved: () -> Unit,
     viewModel: MapNewParkViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
+    val userLocation by viewModel.userLocation.collectAsState()
+    var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        hasPermission = results.values.any { it }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, hasPermission) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> if (hasPermission) viewModel.startLocationUpdates()
+                Lifecycle.Event.ON_STOP -> viewModel.stopLocationUpdates()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (hasPermission) {
+            viewModel.startLocationUpdates()
+        } else {
+            permissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+            )
+        }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.stopLocationUpdates()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -55,6 +105,7 @@ fun MapNewParkScreen(
         Column(modifier = Modifier.padding(innerPadding)) {
             MapDrawingView(
                 corners = viewModel.corners,
+                userLocation = userLocation,
                 onMapTapped = viewModel::onMapTapped,
                 onCornerDragged = viewModel::onCornerDragged,
                 modifier = Modifier

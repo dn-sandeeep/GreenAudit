@@ -2,13 +2,25 @@ package com.sandeep.greenaudit.ui.mappark
 
 import android.content.Context
 import android.graphics.Color as AndroidColor
+import android.location.Location
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sandeep.greenaudit.domain.gis.GeoPoint
 import org.osmdroid.config.Configuration
@@ -29,10 +41,16 @@ private val JAIPUR_CENTER = OsmGeoPoint(26.9124, 75.7873)
  * [MapEventsOverlay] is kept at overlay index 0 for the lifetime of the
  * view so new taps keep registering; markers/shape overlays above it are
  * rebuilt on every [corners] change.
+ *
+ * The seeded demo parks are all real Jaipur coordinates, so anyone testing
+ * from elsewhere can only check in on a park they draw themselves around
+ * their own position - the my-location FAB (and centering on the first
+ * fix) is what makes that findable without manually panning the map.
  */
 @Composable
 fun MapDrawingView(
     corners: List<GeoPoint>,
+    userLocation: Location?,
     onMapTapped: (GeoPoint) -> Unit,
     onCornerDragged: (Int, GeoPoint) -> Unit,
     modifier: Modifier = Modifier,
@@ -73,8 +91,18 @@ fun MapDrawingView(
         onDispose { mapView.onPause() }
     }
 
+    var hasCenteredOnUser by remember { mutableStateOf(false) }
+    LaunchedEffect(userLocation) {
+        if (userLocation != null && !hasCenteredOnUser && corners.isEmpty()) {
+            mapView.controller.setCenter(OsmGeoPoint(userLocation.latitude, userLocation.longitude))
+            mapView.controller.setZoom(19.0)
+            hasCenteredOnUser = true
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
     AndroidView(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         factory = { mapView },
         update = { view ->
             while (view.overlays.size > 1) view.overlays.removeAt(view.overlays.size - 1)
@@ -120,4 +148,19 @@ fun MapDrawingView(
             view.invalidate()
         },
     )
+
+        FloatingActionButton(
+            onClick = {
+                userLocation?.let { location ->
+                    mapView.controller.animateTo(OsmGeoPoint(location.latitude, location.longitude))
+                    mapView.controller.setZoom(19.0)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+        ) {
+            Icon(Icons.Default.MyLocation, contentDescription = "My location")
+        }
+    }
 }

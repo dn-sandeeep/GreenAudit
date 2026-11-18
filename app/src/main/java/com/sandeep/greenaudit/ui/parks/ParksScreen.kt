@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -122,6 +123,23 @@ fun ParksScreen(
                 Icon(Icons.Default.Add, contentDescription = "Map a new park")
             }
         },
+        bottomBar = {
+            TabRow(
+                selectedTabIndex = viewModel.selectedTab.ordinal,
+                modifier = Modifier.navigationBarsPadding(),
+            ) {
+                Tab(
+                    selected = viewModel.selectedTab == ParksTab.LIST,
+                    onClick = { viewModel.onTabSelected(ParksTab.LIST) },
+                    text = { Text("List") },
+                )
+                Tab(
+                    selected = viewModel.selectedTab == ParksTab.MAP,
+                    onClick = { viewModel.onTabSelected(ParksTab.MAP) },
+                    text = { Text("Map") },
+                )
+            }
+        },
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             if (!hasPermission) {
@@ -155,22 +173,6 @@ fun ParksScreen(
                         userLocation = userLocation,
                         selectedParkId = viewModel.selectedParkId,
                         onParkTapped = { viewModel.onParkSelected(it) },
-                    )
-                }
-
-                TabRow(
-                    selectedTabIndex = viewModel.selectedTab.ordinal,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                ) {
-                    Tab(
-                        selected = viewModel.selectedTab == ParksTab.LIST,
-                        onClick = { viewModel.onTabSelected(ParksTab.LIST) },
-                        text = { Text("List") },
-                    )
-                    Tab(
-                        selected = viewModel.selectedTab == ParksTab.MAP,
-                        onClick = { viewModel.onTabSelected(ParksTab.MAP) },
-                        text = { Text("Map") },
                     )
                 }
             }

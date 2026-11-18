@@ -84,7 +84,7 @@ fun ParkListContent(
                 )
             }
         } else {
-            LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+            LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)) {
                 items(parks, key = { it.id }) { park ->
                     ParkListItem(park = park, onClick = { onParkClick(park) })
                 }

@@ -1,5 +1,6 @@
 package com.sandeep.greenaudit.ui.mappark
 
+import android.location.Location
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -7,19 +8,42 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sandeep.greenaudit.data.local.entity.ParkType
+import com.sandeep.greenaudit.data.location.LocationTracker
 import com.sandeep.greenaudit.domain.gis.GeoMath
 import com.sandeep.greenaudit.domain.gis.GeoPoint
 import com.sandeep.greenaudit.domain.repository.ParkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class MapNewParkViewModel @Inject constructor(
     private val parkRepository: ParkRepository,
+    private val locationTracker: LocationTracker,
 ) : ViewModel() {
 
     val corners = mutableStateListOf<GeoPoint>()
+
+    private val _userLocation = MutableStateFlow<Location?>(null)
+    val userLocation: StateFlow<Location?> = _userLocation.asStateFlow()
+
+    private var locationJob: Job? = null
+
+    fun startLocationUpdates() {
+        if (locationJob?.isActive == true) return
+        locationJob = viewModelScope.launch {
+            locationTracker.locationUpdates().collect { location -> _userLocation.value = location }
+        }
+    }
+
+    fun stopLocationUpdates() {
+        locationJob?.cancel()
+        locationJob = null
+    }
 
     var parkName by mutableStateOf("")
         private set

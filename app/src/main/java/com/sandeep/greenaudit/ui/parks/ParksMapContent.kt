@@ -107,7 +107,7 @@ fun ParksMapContent(
                 }
             },
             modifier = Modifier
-                .align(Alignment.BottomEnd)
+                .align(Alignment.BottomStart)
                 .padding(16.dp),
         ) {
             Icon(Icons.Default.MyLocation, contentDescription = "My location")
