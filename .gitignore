@@ -1,0 +1,24 @@
+*.iml
+.gradle
+/local.properties
+.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Secrets - never commit these
+*.jks
+*.keystore
+.env
+*.env
+keystore.properties
+
+# Build artifacts - the Release APK is attached to GitHub Releases, not committed
+*.apk
+*.aab
+*.log
+
+# Room schema exports are committed intentionally (app/schemas), do not ignore
