@@ -145,6 +145,16 @@ fun MapDrawingView(
                 )
             }
 
+            userLocation?.let { location ->
+                view.overlays.add(
+                    Marker(view).apply {
+                        position = OsmGeoPoint(location.latitude, location.longitude)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        title = "You"
+                    },
+                )
+            }
+
             view.invalidate()
         },
     )

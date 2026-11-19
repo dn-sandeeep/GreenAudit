@@ -24,6 +24,7 @@ fun ParkDetailBottomSheet(
     park: ParkEntity,
     userLocation: GeoPoint?,
     eligibility: CheckInEligibility?,
+    hasLocationPermission: Boolean,
     onDismiss: () -> Unit,
     onStartSurvey: () -> Unit,
 ) {
@@ -46,15 +47,17 @@ fun ParkDetailBottomSheet(
                 )
             }
 
-            val reasonText = when (eligibility) {
-                null -> "Waiting for your location…"
-                CheckInEligibility.Eligible -> null
-                is CheckInEligibility.Ineligible -> when (val reason = eligibility.reason) {
+            val reasonText = when {
+                !hasLocationPermission -> "Allow location to see distance and check in."
+                eligibility == null -> "Waiting for your location…"
+                eligibility is CheckInEligibility.Eligible -> null
+                eligibility is CheckInEligibility.Ineligible -> when (val reason = eligibility.reason) {
                     is CheckInEligibility.Reason.OutsideBoundary ->
                         "Go inside to start survey — %,.0f m away".format(reason.distanceMeters)
                     is CheckInEligibility.Reason.WeakGps ->
                         "GPS signal too weak (±%.0f m) — move to open sky".format(reason.accuracyMeters)
                 }
+                else -> null
             }
             if (reasonText != null) {
                 Text(

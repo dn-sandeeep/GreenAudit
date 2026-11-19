@@ -60,6 +60,7 @@ fun ParksScreen(
     val parks by viewModel.filteredParks.collectAsState()
     val userLocation by viewModel.userLocation.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+    val selectedPark = viewModel.selectedParkId?.let { id -> parks.find { it.id == id } }
 
     var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var permissionPermanentlyDenied by remember { mutableStateOf(isLocationPermissionPermanentlyDenied(context)) }
@@ -78,21 +79,29 @@ fun ParksScreen(
         permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
-    // Location is only relevant to the Map tab (live position, my-location button,
-    // and the eligibility shown in a tapped park's bottom sheet) - the List tab is
-    // pure local data, so no permission is requested and no fix is tracked there.
+    // Location is needed on the Map tab (live position, my-location button) AND
+    // whenever a park's bottom sheet is open (List or Map - it shows distance/
+    // bearing and the check-in eligibility reason), but not on a bare List tab.
     val onMapTab = viewModel.selectedTab == ParksTab.MAP
+    val needsLocation = onMapTab || selectedPark != null
+
+    // Tapping a park row/polygon is the first use of the "see distance and
+    // check in" feature if the Map tab was never opened - ask directly here too.
+    LaunchedEffect(selectedPark, hasPermission, permissionPermanentlyDenied) {
+        if (selectedPark != null && !hasPermission && !permissionPermanentlyDenied) requestLocationPermission()
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, hasPermission, onMapTab) {
+    DisposableEffect(lifecycleOwner, hasPermission, needsLocation) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> if (hasPermission && onMapTab) viewModel.startLocationUpdates()
+                Lifecycle.Event.ON_START -> if (hasPermission && needsLocation) viewModel.startLocationUpdates()
                 Lifecycle.Event.ON_STOP -> viewModel.stopLocationUpdates()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        if (hasPermission && onMapTab) viewModel.startLocationUpdates() else viewModel.stopLocationUpdates()
+        if (hasPermission && needsLocation) viewModel.startLocationUpdates() else viewModel.stopLocationUpdates()
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.stopLocationUpdates()
@@ -193,7 +202,6 @@ fun ParksScreen(
         }
     }
 
-    val selectedPark = viewModel.selectedParkId?.let { id -> parks.find { it.id == id } }
     if (selectedPark != null) {
         val eligibility = viewModel.checkInEligibility(selectedPark)
         val userGeoPoint = userLocation?.let { GeoPoint(it.latitude, it.longitude) }
@@ -201,6 +209,7 @@ fun ParksScreen(
             park = selectedPark,
             userLocation = userGeoPoint,
             eligibility = eligibility,
+            hasLocationPermission = hasPermission,
             onDismiss = { viewModel.onParkSelected(null) },
             onStartSurvey = { onStartSurvey(selectedPark.id) },
         )
