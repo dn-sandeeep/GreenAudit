@@ -41,7 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.sandeep.greenaudit.domain.gis.GeoPoint
 import androidx.compose.runtime.LaunchedEffect
-import com.sandeep.greenaudit.ui.common.LocationPermissionPlaceholder
+import com.sandeep.greenaudit.ui.common.PermissionPlaceholder
 import com.sandeep.greenaudit.ui.common.PermissionDeniedMessage
 import com.sandeep.greenaudit.ui.common.hasLocationPermission
 import com.sandeep.greenaudit.ui.common.isLocationPermissionPermanentlyDenied
@@ -178,8 +178,9 @@ fun ParksScreen(
                     // cancelled with the back button, which Android reports as
                     // a denial just like tapping "Deny". Don't render the map
                     // until permission is actually resolved.
-                    LocationPermissionPlaceholder(
+                    PermissionPlaceholder(
                         message = "Allow location to see the map and your position in it.",
+                        buttonLabel = "Allow location",
                         onAllowClick = ::requestLocationPermission,
                     )
                 }
