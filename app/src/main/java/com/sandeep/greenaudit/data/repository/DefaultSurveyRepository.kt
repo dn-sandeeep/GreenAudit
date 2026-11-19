@@ -4,6 +4,7 @@ import com.sandeep.greenaudit.data.local.dao.SurveyDao
 import com.sandeep.greenaudit.data.local.entity.Cleanliness
 import com.sandeep.greenaudit.data.local.entity.SurveyEntity
 import com.sandeep.greenaudit.data.local.entity.SyncState
+import com.sandeep.greenaudit.data.sync.BackgroundSyncScheduler
 import com.sandeep.greenaudit.domain.gis.GeoPoint
 import com.sandeep.greenaudit.domain.repository.SurveyRepository
 import java.util.UUID
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 
 class DefaultSurveyRepository @Inject constructor(
     private val surveyDao: SurveyDao,
+    private val backgroundSyncScheduler: BackgroundSyncScheduler,
 ) : SurveyRepository {
 
     override fun observeForPark(parkId: String): Flow<List<SurveyEntity>> = surveyDao.observeForPark(parkId)
@@ -42,6 +44,7 @@ class DefaultSurveyRepository @Inject constructor(
             updatedAtMillis = nowMillis,
         )
         surveyDao.upsert(survey)
+        backgroundSyncScheduler.scheduleSync()
         return survey
     }
 
@@ -69,5 +72,6 @@ class DefaultSurveyRepository @Inject constructor(
                 updatedAtMillis = nowMillis,
             ),
         )
+        backgroundSyncScheduler.scheduleSync()
     }
 }

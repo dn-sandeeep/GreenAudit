@@ -161,6 +161,13 @@ fun MapNewParkScreen(
                         text = "Perimeter: %,.0f m".format(viewModel.perimeterMeters),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (viewModel.isSelfIntersecting) {
+                        Text(
+                            text = "Boundary crosses itself — drag a corner to fix",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Text(
                         text = "Drag a corner to adjust",
                         style = MaterialTheme.typography.bodySmall,

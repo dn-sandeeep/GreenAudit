@@ -60,6 +60,7 @@ All of it lives in `domain/gis/GeoMath.kt`, `PlanarProjection.kt`, `PointInPolyg
 - **Area & perimeter**: the spherical-excess formula (same family as Google Maps Utils' `SphericalUtil.computeArea`) for area, and haversine summed edge-by-edge for perimeter — not flat shoelace-on-degrees, which is wrong off the equator since a degree of longitude shrinks by `cos(latitude)`.
 - **Point-in-polygon**: the boundary is projected onto a local tangent plane (equirectangular projection around the polygon's first point, in `PlanarProjection.kt`) and a standard ray-casting test runs on the flat result. This keeps the inside/outside check and the "how far outside" distance (`distanceToPolygonBoundaryMeters`, used in the check-in gate's message) consistent with each other.
 - **Check-in rule** (`CheckInEligibilityUseCase`): eligible only if point-in-polygon is true **and** GPS accuracy is ≤25 m; if outside, the message reports distance to the nearest edge rather than a generic "no."
+- **Self-intersection rejection (bonus, optional)**: `PolygonSelfIntersection.kt` checks every pair of non-adjacent edges of a drawn boundary for a crossing (same tangent-plane projection as point-in-polygon). Wired into the map-a-new-park screen — "Save park" is disabled with a warning while the boundary crosses itself.
 
 ## Offline & sync
 
@@ -67,15 +68,20 @@ Every write (`ParkRepository.saveNewPark`, `SurveyRepository.checkIn`/`submit`, 
 
 `SyncManager.syncNow()` (wired to the "Sync now" / sync icon on the parks screen) reads every row with a non-`SYNCED` state and pushes it through `SyncApi`. There's no real backend: `FakeSyncApi` stands in for one, reading `BuildConfig.BASE_URL` (set per build type, never hardcoded in Kotlin) and simulating a real network — a random 250–900 ms delay and a ~10% induced failure — before flipping the row to `SYNCED` on success. A failed push just leaves the row pending for the next "Sync now".
 
+**Background sync (bonus, optional)**: every write that leaves a row `PENDING_*` (`saveNewPark`, `updateStatus`, `markSurveyed`, `checkIn`, `submit`, `addPhoto`) also calls `BackgroundSyncScheduler.scheduleSync()`, which enqueues a `SyncWorker` (a `CoroutineWorker` wired through Hilt's `HiltWorkerFactory`, see `GreenAuditApp.workManagerConfiguration`) with a `NetworkType.CONNECTED` constraint via `WorkManager`. Because it's enqueued with WorkManager rather than held in memory, it survives the app being backgrounded, killed, or the device rebooting, and fires `SyncManager.syncNow()` automatically the moment connectivity returns — no need to tap "Sync now" at all unless you want to force an immediate attempt.
+
 **Conflict policy** (same park edited on two phones while both are offline): last-write-wins by `updatedAtMillis` — whichever device's "Sync now" reaches the (fake) backend last overwrites the other's copy. This is the cut I made deliberately rather than building real merge/CRDT logic: it's simple, predictable, and matches what the brief asks for ("explain how conflicts work," not "solve them perfectly"). With more time, I'd move to a per-field last-write-wins (so two surveyors editing different fields of the same park don't clobber each other) or a small CRDT for the boundary/status fields specifically.
 
 ## What I cut / would do next with more time
 
-Required items 1–6 are all implemented and were walked end-to-end on a physical device (see commit history). What I'd add next, roughly in priority order:
-- **Walk mode** and the other bonuses (self-intersection rejection, GeoJSON export, WorkManager background sync, offline tiles, dark mode) — none attempted; the brief is explicit that 1–6 solid beats 1–6 plus half-done bonuses.
+Required items 1–6 are all implemented and were walked end-to-end on a physical device (see commit history), and are the main basis for review per the brief ("four features done well beat seven half-done"). Two items from the **optional bonus list** are also done, attempted only after 1–6 were solid: rejecting self-intersecting boundaries (`domain/gis/PolygonSelfIntersection.kt`, wired into the map-a-new-park screen) and automatic WorkManager background sync (above). No instrumented/Robolectric test was added for `SyncWorker` — the project's test setup is pure-JVM unit tests, and a `WorkManagerTestInitHelper` harness felt out of scope for a bonus feature; this is a deliberate cut, not an oversight.
+
+What I'd add next, roughly in priority order:
+- **Walk mode** and the remaining bonuses (GeoJSON export, offline map tiles, dark mode) — not attempted; the brief is explicit that 1–6 solid beats 1–6 plus half-done bonuses.
 - **A proper domain model layer** separate from the Room entities (entities are reused directly as what repositories return — fine for an app this size, but would start to hurt if the schema needed to diverge from what the UI wants).
 - **DAO/repository/sync instrumented tests** — the four required unit-test suites (area/perimeter, point-in-polygon, distance/bearing, check-in rule) are done and green; Room/Hilt test coverage for the newer data layer is the next thing I'd add.
 - **A GitHub Actions workflow** building the APK and running tests on every push (listed as a bonus).
+- Instrumented/Robolectric coverage for `SyncWorker` and the WorkManager scheduling path.
 - Seeding from the device's *actual* starting city instead of a fixed Jaipur list, so the "check in on a seeded park" path works for anyone, anywhere, out of the box.
 
 ## AI use

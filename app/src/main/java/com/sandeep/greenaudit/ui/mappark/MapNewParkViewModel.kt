@@ -11,6 +11,7 @@ import com.sandeep.greenaudit.data.local.entity.ParkType
 import com.sandeep.greenaudit.data.location.LocationTracker
 import com.sandeep.greenaudit.domain.gis.GeoMath
 import com.sandeep.greenaudit.domain.gis.GeoPoint
+import com.sandeep.greenaudit.domain.gis.PolygonSelfIntersection
 import com.sandeep.greenaudit.domain.repository.ParkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -54,8 +55,9 @@ class MapNewParkViewModel @Inject constructor(
 
     val areaSqMeters: Double get() = if (corners.size >= 3) GeoMath.computeAreaSqMeters(corners) else 0.0
     val perimeterMeters: Double get() = if (corners.size >= 2) GeoMath.computePerimeterMeters(corners) else 0.0
+    val isSelfIntersecting: Boolean get() = PolygonSelfIntersection.isSelfIntersecting(corners)
 
-    val canSave: Boolean get() = corners.size >= 3 && parkName.isNotBlank() && !isSaving
+    val canSave: Boolean get() = corners.size >= 3 && parkName.isNotBlank() && !isSaving && !isSelfIntersecting
 
     fun onMapTapped(point: GeoPoint) {
         corners.add(point)

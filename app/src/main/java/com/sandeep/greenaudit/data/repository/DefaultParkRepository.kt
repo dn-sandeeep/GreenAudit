@@ -6,6 +6,7 @@ import com.sandeep.greenaudit.data.local.entity.ParkStatus
 import com.sandeep.greenaudit.data.local.entity.ParkType
 import com.sandeep.greenaudit.data.local.entity.SyncState
 import com.sandeep.greenaudit.data.local.seed.SeedDataProvider
+import com.sandeep.greenaudit.data.sync.BackgroundSyncScheduler
 import com.sandeep.greenaudit.domain.gis.GeoMath
 import com.sandeep.greenaudit.domain.gis.GeoPoint
 import com.sandeep.greenaudit.domain.repository.ParkRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 
 class DefaultParkRepository @Inject constructor(
     private val parkDao: ParkDao,
+    private val backgroundSyncScheduler: BackgroundSyncScheduler,
 ) : ParkRepository {
 
     override fun observeParks(): Flow<List<ParkEntity>> = parkDao.observeAll()
@@ -42,6 +44,7 @@ class DefaultParkRepository @Inject constructor(
             updatedAtMillis = now,
         )
         parkDao.upsert(park)
+        backgroundSyncScheduler.scheduleSync()
         return park
     }
 
@@ -54,6 +57,7 @@ class DefaultParkRepository @Inject constructor(
                 updatedAtMillis = nowMillis,
             ),
         )
+        backgroundSyncScheduler.scheduleSync()
     }
 
     override suspend fun markSurveyed(parkId: String, surveyedAtMillis: Long) {
@@ -65,6 +69,7 @@ class DefaultParkRepository @Inject constructor(
                 updatedAtMillis = surveyedAtMillis,
             ),
         )
+        backgroundSyncScheduler.scheduleSync()
     }
 
     /** A row already pending a create keeps pending-create; anything synced moves to pending-update. */
