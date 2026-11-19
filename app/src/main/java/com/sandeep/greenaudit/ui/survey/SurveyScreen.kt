@@ -57,6 +57,8 @@ import coil3.compose.AsyncImage
 import com.sandeep.greenaudit.data.local.entity.Cleanliness
 import com.sandeep.greenaudit.domain.survey.CheckInEligibility
 import com.sandeep.greenaudit.ui.common.PermissionDeniedMessage
+import com.sandeep.greenaudit.ui.common.PermissionPlaceholder
+import com.sandeep.greenaudit.ui.common.PermissionRationaleDialog
 import com.sandeep.greenaudit.ui.common.hasLocationPermission
 import com.sandeep.greenaudit.ui.common.isLocationPermissionPermanentlyDenied
 import com.sandeep.greenaudit.ui.common.markLocationPermissionRequested
@@ -82,6 +84,7 @@ fun SurveyScreen(
     val context = LocalContext.current
     var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var permissionPermanentlyDenied by remember { mutableStateOf(isLocationPermissionPermanentlyDenied(context)) }
+    var showRationale by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
         hasPermission = results.values.any { it }
@@ -92,10 +95,10 @@ fun SurveyScreen(
     // revoke doesn't get stuck looking "permanently denied" from old history.
     LaunchedEffect(hasPermission) { resetLocationPermissionRequestCountIfGranted(context) }
 
-    // Checking in is exactly the feature that needs location - ask directly
-    // on entry (right after "Go inside to start survey" was tapped), no
-    // rationale UI first, and never assume a permission already granted on
-    // another screen without confirming it's actually held.
+    // Checking in is exactly the feature that needs location - explain why,
+    // then ask on entry (right after "Go inside to start survey" was
+    // tapped), and never assume a permission already granted on another
+    // screen without confirming it's actually held.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, hasPermission) {
         val observer = LifecycleEventObserver { _, event ->
@@ -109,10 +112,7 @@ fun SurveyScreen(
         if (hasPermission) {
             viewModel.startLocationUpdates()
         } else if (!permissionPermanentlyDenied) {
-            markLocationPermissionRequested(context)
-            permissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-            )
+            showRationale = true
         }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
@@ -144,6 +144,16 @@ fun SurveyScreen(
                     },
                 )
             }
+        } else if (!hasPermission) {
+            // Not granted yet - including right after the dialog was
+            // cancelled with the back button, which Android reports as a
+            // denial just like tapping "Deny". Give a way to retry.
+            PermissionPlaceholder(
+                message = "Allow location to confirm you're inside the park before checking in.",
+                buttonLabel = "Allow location",
+                onAllowClick = { showRationale = true },
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+            )
         } else if (currentSurvey == null) {
             CheckInGate(
                 eligibility = viewModel.eligibility(),
@@ -268,6 +278,21 @@ fun SurveyScreen(
                 }
             }
         }
+    }
+
+    if (showRationale) {
+        PermissionRationaleDialog(
+            title = "Location access",
+            message = "GreenAudit uses your location to confirm you're physically inside the park before letting you check in.",
+            onAllow = {
+                showRationale = false
+                markLocationPermissionRequested(context)
+                permissionLauncher.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            },
+            onDismiss = { showRationale = false },
+        )
     }
 }
 

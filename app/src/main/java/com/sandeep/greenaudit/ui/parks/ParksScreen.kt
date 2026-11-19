@@ -43,6 +43,7 @@ import com.sandeep.greenaudit.domain.gis.GeoPoint
 import androidx.compose.runtime.LaunchedEffect
 import com.sandeep.greenaudit.ui.common.PermissionPlaceholder
 import com.sandeep.greenaudit.ui.common.PermissionDeniedMessage
+import com.sandeep.greenaudit.ui.common.PermissionRationaleDialog
 import com.sandeep.greenaudit.ui.common.hasLocationPermission
 import com.sandeep.greenaudit.ui.common.isLocationPermissionPermanentlyDenied
 import com.sandeep.greenaudit.ui.common.markLocationPermissionRequested
@@ -64,6 +65,7 @@ fun ParksScreen(
 
     var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var permissionPermanentlyDenied by remember { mutableStateOf(isLocationPermissionPermanentlyDenied(context)) }
+    var showRationale by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
         hasPermission = results.values.any { it }
@@ -74,11 +76,6 @@ fun ParksScreen(
     // revoke doesn't get stuck looking "permanently denied" from old history.
     LaunchedEffect(hasPermission) { resetLocationPermissionRequestCountIfGranted(context) }
 
-    fun requestLocationPermission() {
-        markLocationPermissionRequested(context)
-        permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-    }
-
     // Location is needed on the Map tab (live position, my-location button) AND
     // whenever a park's bottom sheet is open (List or Map - it shows distance/
     // bearing and the check-in eligibility reason), but not on a bare List tab.
@@ -86,9 +83,10 @@ fun ParksScreen(
     val needsLocation = onMapTab || selectedPark != null
 
     // Tapping a park row/polygon is the first use of the "see distance and
-    // check in" feature if the Map tab was never opened - ask directly here too.
+    // check in" feature if the Map tab was never opened - ask (via the
+    // rationale dialog) here too.
     LaunchedEffect(selectedPark, hasPermission, permissionPermanentlyDenied) {
-        if (selectedPark != null && !hasPermission && !permissionPermanentlyDenied) requestLocationPermission()
+        if (selectedPark != null && !hasPermission && !permissionPermanentlyDenied) showRationale = true
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -145,8 +143,8 @@ fun ParksScreen(
                     selected = viewModel.selectedTab == ParksTab.MAP,
                     onClick = {
                         viewModel.onTabSelected(ParksTab.MAP)
-                        // First use of the map feature - ask directly, no rationale UI first.
-                        if (!hasPermission && !permissionPermanentlyDenied) requestLocationPermission()
+                        // First use of the map feature - explain why, then ask.
+                        if (!hasPermission && !permissionPermanentlyDenied) showRationale = true
                     },
                     text = { Text("Map") },
                 )
@@ -181,7 +179,7 @@ fun ParksScreen(
                     PermissionPlaceholder(
                         message = "Allow location to see the map and your position in it.",
                         buttonLabel = "Allow location",
-                        onAllowClick = ::requestLocationPermission,
+                        onAllowClick = { showRationale = true },
                     )
                 }
             }
@@ -213,6 +211,19 @@ fun ParksScreen(
             hasLocationPermission = hasPermission,
             onDismiss = { viewModel.onParkSelected(null) },
             onStartSurvey = { onStartSurvey(selectedPark.id) },
+        )
+    }
+
+    if (showRationale) {
+        PermissionRationaleDialog(
+            title = "Location access",
+            message = "GreenAudit uses your location to show your position on the map and to check whether you're inside a park before you can start a survey.",
+            onAllow = {
+                showRationale = false
+                markLocationPermissionRequested(context)
+                permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            },
+            onDismiss = { showRationale = false },
         )
     }
 }

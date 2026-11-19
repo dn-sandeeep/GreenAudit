@@ -49,6 +49,7 @@ import com.sandeep.greenaudit.data.local.entity.ParkType
 import com.sandeep.greenaudit.domain.gis.AreaUnits
 import com.sandeep.greenaudit.ui.common.PermissionPlaceholder
 import com.sandeep.greenaudit.ui.common.PermissionDeniedMessage
+import com.sandeep.greenaudit.ui.common.PermissionRationaleDialog
 import com.sandeep.greenaudit.ui.common.hasLocationPermission
 import com.sandeep.greenaudit.ui.common.isLocationPermissionPermanentlyDenied
 import com.sandeep.greenaudit.ui.common.markLocationPermissionRequested
@@ -66,6 +67,7 @@ fun MapNewParkScreen(
     val userLocation by viewModel.userLocation.collectAsState()
     var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var permissionPermanentlyDenied by remember { mutableStateOf(isLocationPermissionPermanentlyDenied(context)) }
+    var showRationale by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
         hasPermission = results.values.any { it }
@@ -77,8 +79,7 @@ fun MapNewParkScreen(
     LaunchedEffect(hasPermission) { resetLocationPermissionRequestCountIfGranted(context) }
 
     // Entering this screen (from the "+" FAB) is the first use of the mapping
-    // feature, so ask directly here, no rationale UI first - matching the
-    // Parks screen's Map tab, which this screen is kept consistent with.
+    // feature - explain why, then ask, matching the Parks screen's Map tab.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, hasPermission) {
         val observer = LifecycleEventObserver { _, event ->
@@ -92,10 +93,7 @@ fun MapNewParkScreen(
         if (hasPermission) {
             viewModel.startLocationUpdates()
         } else if (!permissionPermanentlyDenied) {
-            markLocationPermissionRequested(context)
-            permissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-            )
+            showRationale = true
         }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
@@ -216,15 +214,25 @@ fun MapNewParkScreen(
             PermissionPlaceholder(
                 message = "Allow location to draw a park boundary centered on where you're standing.",
                 buttonLabel = "Allow location",
-                onAllowClick = {
-                    markLocationPermissionRequested(context)
-                    permissionLauncher.launch(
-                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-                    )
-                },
+                onAllowClick = { showRationale = true },
                 modifier = Modifier.padding(innerPadding),
             )
         }
+    }
+
+    if (showRationale) {
+        PermissionRationaleDialog(
+            title = "Location access",
+            message = "GreenAudit uses your location to center the map on where you're standing, so you can draw a park boundary around yourself.",
+            onAllow = {
+                showRationale = false
+                markLocationPermissionRequested(context)
+                permissionLauncher.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            },
+            onDismiss = { showRationale = false },
+        )
     }
 }
 

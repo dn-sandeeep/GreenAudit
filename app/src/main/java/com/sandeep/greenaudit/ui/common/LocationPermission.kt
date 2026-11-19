@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,9 +38,31 @@ fun resetLocationPermissionRequestCountIfGranted(context: Context) =
     resetPermissionRequestCountIfGranted(context, KEY_LOCATION_REQUEST_COUNT, hasLocationPermission(context))
 
 /**
+ * The explanation shown once, right before the system permission dialog -
+ * satisfies "explain why" without a persistent on-screen card. "Allow"
+ * should trigger the real `permissionLauncher.launch(...)`; "Not now"
+ * just dismisses, leaving the caller's retry path (a [PermissionPlaceholder]
+ * button) as the way back in.
+ */
+@Composable
+fun PermissionRationaleDialog(
+    title: String,
+    message: String,
+    onAllow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = { TextButton(onClick = onAllow) { Text("Allow") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+    )
+}
+
+/**
  * The one case that needs a fallback: the user picked "Don't ask again",
- * so re-launching the system dialog silently does nothing. Everywhere
- * else, the system dialog is fired directly with no rationale UI first.
+ * so re-launching the system dialog silently does nothing.
  */
 @Composable
 fun PermissionDeniedMessage(

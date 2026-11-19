@@ -40,6 +40,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sandeep.greenaudit.ui.common.PermissionDeniedMessage
 import com.sandeep.greenaudit.ui.common.PermissionPlaceholder
+import com.sandeep.greenaudit.ui.common.PermissionRationaleDialog
 import com.sandeep.greenaudit.ui.common.hasCameraPermission
 import com.sandeep.greenaudit.ui.common.isCameraPermissionPermanentlyDenied
 import com.sandeep.greenaudit.ui.common.markCameraPermissionRequested
@@ -58,6 +59,7 @@ fun CameraCaptureScreen(
     val context = LocalContext.current
     var hasPermission by remember { mutableStateOf(hasCameraPermission(context)) }
     var permanentlyDenied by remember { mutableStateOf(isCameraPermissionPermanentlyDenied(context)) }
+    var showRationale by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasPermission = granted
@@ -69,12 +71,9 @@ fun CameraCaptureScreen(
     LaunchedEffect(hasPermission) { resetCameraPermissionRequestCountIfGranted(context) }
 
     // Tapping the "+" photo tile is the first use of the camera feature -
-    // ask directly on screen entry, no rationale UI first.
+    // explain why, then ask, on screen entry.
     LaunchedEffect(Unit) {
-        if (!hasPermission && !permanentlyDenied) {
-            markCameraPermissionRequested(context)
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        }
+        if (!hasPermission && !permanentlyDenied) showRationale = true
     }
 
     if (!hasPermission) {
@@ -96,10 +95,19 @@ fun CameraCaptureScreen(
             PermissionPlaceholder(
                 message = "Allow the camera to take a stamped photo for this survey.",
                 buttonLabel = "Allow camera",
-                onAllowClick = {
+                onAllowClick = { showRationale = true },
+            )
+        }
+        if (showRationale) {
+            PermissionRationaleDialog(
+                title = "Camera access",
+                message = "GreenAudit uses the camera to take a photo for this survey, stamped with the park name, your coordinates, and the time.",
+                onAllow = {
+                    showRationale = false
                     markCameraPermissionRequested(context)
                     permissionLauncher.launch(Manifest.permission.CAMERA)
                 },
+                onDismiss = { showRationale = false },
             )
         }
         return
