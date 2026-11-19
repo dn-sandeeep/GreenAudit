@@ -1,5 +1,11 @@
 package com.sandeep.greenaudit.ui.survey
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,12 +37,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -45,6 +56,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import coil3.compose.AsyncImage
 import com.sandeep.greenaudit.data.local.entity.Cleanliness
 import com.sandeep.greenaudit.domain.survey.CheckInEligibility
+import com.sandeep.greenaudit.ui.common.PermissionDeniedMessage
+import com.sandeep.greenaudit.ui.common.hasLocationPermission
+import com.sandeep.greenaudit.ui.common.isLocationPermissionPermanentlyDenied
+import com.sandeep.greenaudit.ui.common.markLocationPermissionRequested
+import com.sandeep.greenaudit.ui.common.resetLocationPermissionRequestCountIfGranted
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,17 +79,41 @@ fun SurveyScreen(
     val photos by viewModel.photos.collectAsState()
     val userLocation by viewModel.userLocation.collectAsState()
 
+    val context = LocalContext.current
+    var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
+    var permissionPermanentlyDenied by remember { mutableStateOf(isLocationPermissionPermanentlyDenied(context)) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        hasPermission = results.values.any { it }
+        if (!hasPermission) permissionPermanentlyDenied = isLocationPermissionPermanentlyDenied(context)
+    }
+
+    // A granted permission clears any prior denial streak, so a later Settings
+    // revoke doesn't get stuck looking "permanently denied" from old history.
+    LaunchedEffect(hasPermission) { resetLocationPermissionRequestCountIfGranted(context) }
+
+    // Checking in is exactly the feature that needs location - ask directly
+    // on entry (right after "Go inside to start survey" was tapped), no
+    // rationale UI first, and never assume a permission already granted on
+    // another screen without confirming it's actually held.
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, hasPermission) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> viewModel.startLocationUpdates()
+                Lifecycle.Event.ON_START -> if (hasPermission) viewModel.startLocationUpdates()
                 Lifecycle.Event.ON_STOP -> viewModel.stopLocationUpdates()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        viewModel.startLocationUpdates()
+        if (hasPermission) {
+            viewModel.startLocationUpdates()
+        } else if (!permissionPermanentlyDenied) {
+            markLocationPermissionRequested(context)
+            permissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+            )
+        }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.stopLocationUpdates()
@@ -93,7 +133,18 @@ fun SurveyScreen(
         },
     ) { innerPadding ->
         val currentSurvey = survey
-        if (currentSurvey == null) {
+        if (permissionPermanentlyDenied) {
+            Column(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(16.dp)) {
+                PermissionDeniedMessage(
+                    message = "Location is off - checking in needs it to confirm you're inside the park.",
+                    onOpenSettings = {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                        )
+                    },
+                )
+            }
+        } else if (currentSurvey == null) {
             CheckInGate(
                 eligibility = viewModel.eligibility(),
                 userLocationKnown = userLocation != null,
