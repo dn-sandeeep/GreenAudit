@@ -10,9 +10,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -117,7 +121,12 @@ fun MapNewParkScreen(
         // fallback message below) - a retry button there couldn't do
         // anything a Settings link doesn't already cover, same as the Map tab.
         if (hasPermission || permissionPermanentlyDenied) {
-            Column(modifier = Modifier.padding(innerPadding)) {
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
+                    .imePadding(),
+            ) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     MapDrawingView(
                         corners = viewModel.corners,
@@ -145,7 +154,11 @@ fun MapNewParkScreen(
                     }
                 }
 
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     Text(
                         text = if (viewModel.corners.isEmpty()) "Tap to add corners" else "${viewModel.corners.size} corners",
                         style = MaterialTheme.typography.titleMedium,
