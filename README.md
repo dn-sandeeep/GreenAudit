@@ -94,4 +94,3 @@ What I'd add next, roughly in priority order:
 - **This README** was also written by Claude Code, from the actual code and the on-device test results.
 - The pre-existing GIS domain layer (haversine distance/bearing, geodesic area/perimeter, point-in-polygon, the check-in eligibility rule) and its four unit-test suites were built the same way, in an earlier session.
 
-I can walk through, explain, and modify any part of this code live.
